@@ -53,6 +53,10 @@ The real power is **Split Trust**: deploy tang-edge to 2-3 different providers, 
 
 ## Quick Start
 
+For this fork's `tang.rwv.dev` deployment using Worker Secrets, 1Password backups,
+and local manual rotation, follow [the deployment runbook](docs/deployment-rwv.md).
+It uses `wrangler.secrets.jsonc` and bypasses the upstream setup wizard below.
+
 ```bash
 bash setup.sh
 ```

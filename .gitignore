@@ -7,3 +7,7 @@ coverage/
 .tang-platform
 local.settings.json
 *.log
+.tang-cloudflare-state.json
+.dev.vars.*
+.env*
+!.env.example

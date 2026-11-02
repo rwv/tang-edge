@@ -92,7 +92,6 @@ describe("signAdvertisement", () => {
     const sigInput = new TextEncoder().encode(
       `${jws.signatures[0].protected}.${jws.payload}`,
     );
-    const hash = await crypto.subtle.digest("SHA-512", sigInput);
 
     // Decode signature (compact r || s format, 132 bytes)
     const sigBytes = base64urlDecode(jws.signatures[0].signature);
@@ -109,7 +108,18 @@ describe("signAdvertisement", () => {
     const pubBytes = new Uint8Array(pubHex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
 
     // Verify directly with raw bytes
-    const valid = p521.verify(sigBytes, new Uint8Array(hash), pubBytes);
+    const valid = p521.verify(sigBytes, sigInput, pubBytes);
     expect(valid).toBe(true);
+  });
+
+  it("verifies with the independent Web Crypto ES512 implementation", async () => {
+    const key = generateSigningKey();
+    const jws = await signAdvertisement([key], [key]);
+    const publicKey = await crypto.subtle.importKey("jwk", {
+      kty: key.kty, crv: key.crv, x: key.x, y: key.y,
+    }, { name: "ECDSA", namedCurve: "P-521" }, false, ["verify"]);
+    const input = new TextEncoder().encode(`${jws.signatures[0].protected}.${jws.payload}`);
+    expect(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-512" },
+      publicKey, base64urlDecode(jws.signatures[0].signature), input)).toBe(true);
   });
 });
