@@ -4,6 +4,22 @@ This fork deploys Tang to Cloudflare Workers using an immutable Worker Secret,
 with private key backups in 1Password and manual rotation from a local machine.
 The upstream KV entry point remains available for other deployments.
 
+## Deployment record
+
+Deployed on 2026-11-02 to <https://tang.rwv.dev> using local Wrangler 4.110.0.
+Source commit: `becabfd1b5fba74815d3766d02e8da4536a70a44`.
+Worker version: `cae9e9a9-de2b-4a79-ab1e-bc5138d65417`.
+The initial signing/exchange key pair was backed up to the Personal 1Password
+vault and read back successfully before deployment. No private values or backup
+item identifiers are recorded in this public repository.
+
+Live verification passed: health endpoint, independent Web Crypto ES512
+verification, blinded ECMR recovery, and `/rotate` returning 404. Cloudflare
+settings confirm a single `secret_text` binding named `TANG_KEYSET`, no KV
+binding, no Cron schedules, and disabled workers.dev/preview hostnames.
+Retired-key compatibility passed in the local Workers runtime. A real clevis
+client round trip is still required before binding production disks.
+
 ## Configuration
 
 - Entry point: `src/worker-secrets.ts`
