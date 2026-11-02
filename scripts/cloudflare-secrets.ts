@@ -72,7 +72,13 @@ async function saveBackup(set: SecretKeySet): Promise<State> {
         value: `Full Tang private key backup. Active: ${set.active.length}; retired: ${set.retired.length}. Created ${createdAt}. Never remove retired exchange keys while clients still depend on them. This backup is created before deployment and may be a pending generation.` },
     ],
   };
-  const item = JSON.parse(command("op", ["item", "create", "--vault", vault, "--format", "json", "-"], JSON.stringify(template)));
+  const directory = mkdtempSync(join(tmpdir(), "tang-backup-"));
+  let item: { id?: string };
+  try {
+    const path = join(directory, "item.json");
+    writeFileSync(path, JSON.stringify(template), { mode: 0o600 });
+    item = JSON.parse(command("op", ["item", "create", "--template", path, "--vault", vault, "--format", "json"]));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
   if (typeof item.id !== "string") throw new Error("1Password did not return an item ID");
   const state: State = { itemId: item.id, vault, createdAt, thumbprints };
   const restored = readBackup(state);
