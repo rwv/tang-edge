@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (c) tang-edge contributors
 
-import { Hono } from "hono";
-import { getPath } from "hono/utils/url";
+import { createApp } from "./app";
 import type { Env } from "./storage/types";
 import { CloudflareKVStorage } from "./storage/adapters/cloudflare-kv";
-import adv from "./routes/adv";
-import rec from "./routes/rec";
-import rotate from "./routes/rotate";
 import { rotateAllKeys } from "./storage/kv-store";
 
 interface CloudflareEnv {
@@ -15,31 +11,7 @@ interface CloudflareEnv {
   ROTATE_TOKEN?: string;
 }
 
-const app = new Hono<{ Bindings: Env }>({
-  getPath: (req) => {
-    const path = getPath(req);
-    return path.length > 1 ? path.replace(/\/+$/, "") || "/" : path;
-  },
-});
-
-// Security headers
-app.use("*", async (c, next) => {
-  await next();
-  c.header("X-Content-Type-Options", "nosniff");
-  c.header("Cache-Control", "no-store");
-});
-
-// Tang protocol endpoints
-app.route("/adv", adv);
-app.route("/rec", rec);
-
-// Management endpoints
-app.route("/rotate", rotate);
-
-// Health check
-app.get("/", (c) => {
-  return c.json({ service: "tang-edge", status: "ok" });
-});
+const app = createApp({ rotation: true });
 
 function wrapEnv(cfEnv: CloudflareEnv): Env {
   return {
