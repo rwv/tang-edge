@@ -44,13 +44,12 @@ export async function signAdvertisement(
  * Signs the data with ECDSA using SHA-512, returns the signature in JWS format (r || s, each 66 bytes).
  */
 async function es512Sign(key: ECPrivateJWK, data: Uint8Array): Promise<Uint8Array> {
-  const hash = await crypto.subtle.digest("SHA-512", data);
-
   const d = base64urlToBigint(key.d);
   let dHex = d.toString(16);
   if (dHex.length % 2) dHex = "0" + dHex;
   while (dHex.length < 132) dHex = "00" + dHex;
   const dBytes = new Uint8Array(dHex.match(/.{2}/g)!.map((b) => Number.parseInt(b, 16)));
 
-  return p521.sign(new Uint8Array(hash), dBytes);
+  // noble-curves v2 hashes the message with SHA-512 by default.
+  return p521.sign(data, dBytes);
 }
