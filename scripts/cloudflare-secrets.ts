@@ -5,7 +5,8 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "no
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { generateSigningKey, generateExchangeKey } from "../src/crypto/keygen";
-import { jwkThumbprint } from "../src/crypto/jwk-utils";
+import { p521 } from "@noble/curves/nist.js";
+import { jwkThumbprint, base64urlDecode, bigintToBase64url } from "../src/crypto/jwk-utils";
 import { parseKeySet, WorkerSecretStorage, type SecretKeySet } from "../src/storage/adapters/worker-secret";
 
 const root = resolve(import.meta.dir, "..");
@@ -20,7 +21,7 @@ function command(program: string, args: string[], input?: string, extraEnv: Reco
     cwd: root, input, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, WRANGLER_SEND_METRICS: "false", ...extraEnv },
   });
-  // Do not emit subprocess stdout/stderr: a credential command could include secret data.
+  // Only emit sanitized diagnostics: credential command output can contain secret data.
   if (result.error || result.status !== 0) {
     const detail = (result.stderr ?? "").replace(/[A-Za-z0-9_-]{64,}/g, "[REDACTED]").slice(0, 1200);
     throw new Error(`${program} ${args[0]} failed (exit ${result.status}): ${detail}`);
@@ -42,11 +43,21 @@ function readBackup(state: State): SecretKeySet {
   return parseKeySet(value);
 }
 
+async function validateForDeployment(set: SecretKeySet) {
+  await WorkerSecretStorage.create(JSON.stringify(set));
+  for (const key of [...set.active, ...set.retired]) {
+    const derived = p521.Point.fromBytes(p521.getPublicKey(base64urlDecode(key.d))).toAffine();
+    if (bigintToBase64url(derived.x) !== key.x || bigintToBase64url(derived.y) !== key.y) {
+      throw new Error("Tang private key does not match its public coordinates");
+    }
+  }
+}
+
 async function saveBackup(set: SecretKeySet): Promise<State> {
   const value = JSON.stringify(set);
   // Leave a little headroom below the 5 KB per-secret limit. Never discard old keys to fit.
   if (Buffer.byteLength(value) > 5000) throw new Error("Key set exceeds one Worker Secret. Split secret storage before rotating; retain all old keys.");
-  await WorkerSecretStorage.create(value);
+  await validateForDeployment(set);
   const createdAt = new Date().toISOString();
   const thumbprints = await Promise.all(set.active.map(key => jwkThumbprint(key)));
   const template = {
@@ -85,7 +96,7 @@ async function main() {
   } else if (action === "deploy" || action === "dry-run") {
     const state = readState();
     const set = readBackup(state);
-    await WorkerSecretStorage.create(JSON.stringify(set));
+    await validateForDeployment(set);
     const directory = mkdtempSync(join(tmpdir(), "tang-edge-"));
     try {
       const path = join(directory, "secrets.json");
