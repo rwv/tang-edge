@@ -17,8 +17,34 @@ Live verification passed: health endpoint, independent Web Crypto ES512
 verification, blinded ECMR recovery, and `/rotate` returning 404. Cloudflare
 settings confirm a single `secret_text` binding named `TANG_KEYSET`, no KV
 binding, no Cron schedules, and disabled workers.dev/preview hostnames.
-Retired-key compatibility passed in the local Workers runtime. A real clevis
-client round trip is still required before binding production disks.
+Retired-key compatibility passed in the local Workers runtime. Real Clevis
+client verification against the live service also passed in Docker on 2026-11-02:
+Debian 12 arm64, Clevis/clevis-luks `19-2`, jose `11-2+deb12u1`, and cryptsetup
+`2:2.6.1-4~deb12u2`. The tests verified 48-byte UTF-8 text and 65,536-byte random
+binary round trips, rejection of an unknown signing thumbprint, and binding a
+disposable 64 MiB LUKS2 file, recovering its slot password via Tang, and validating
+it with `cryptsetup open --test-passphrase`. This does not exercise a machine's
+initramfs, boot networking, or reboot sequence.
+
+## Repeat the real Clevis client test
+
+```sh
+docker build -t tang-clevis-e2e:local tests/clevis
+docker run --rm --read-only \
+  --tmpfs /tmp:rw,nosuid,nodev,size=192m \
+  --tmpfs /run:rw,nosuid,nodev,size=16m \
+  --cap-drop ALL --security-opt no-new-privileges \
+  --pids-limit 128 --memory 512m \
+  -e TANG_URL=https://tang.rwv.dev \
+  -e TANG_THP='<independently verified active signing-key thumbprint>' \
+  tang-clevis-e2e:local
+```
+
+Use the public signing-key thumbprint recorded by the backup helper. The test
+pins that key instead of automatically accepting any advertisement. It uses no
+host mounts or devices and needs no privileged container. All plaintext, JWE,
+LUKS headers, and temporary recovery keys stay inside the disposable container.
+The reduced PBKDF iteration count applies only to this random-key test fixture.
 
 ## Configuration
 
