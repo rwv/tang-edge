@@ -16,7 +16,7 @@ item identifiers are recorded in this public repository.
 Live verification passed: health endpoint, independent Web Crypto ES512
 verification, blinded ECMR recovery, and `/rotate` returning 404. Cloudflare
 settings confirm a single `secret_text` binding named `TANG_KEYSET`, no KV
-binding, no Cron schedules, and disabled workers.dev/preview hostnames.
+binding, no Cron schedules, and initially disabled workers.dev/preview hostnames.
 Retired-key compatibility passed in the local Workers runtime. Real Clevis
 client verification against the live service also passed in Docker on 2026-11-02:
 Debian 12 arm64, Clevis/clevis-luks `19-2`, jose `11-2+deb12u1`, and cryptsetup
@@ -55,12 +55,40 @@ The reduced PBKDF iteration count applies only to this random-key test fixture.
 - No KV namespace, scheduled rotation, or `ROTATE_TOKEN` is required.
 - `/adv`, `/adv/:thumbprint`, and `/rec/:thumbprint` remain standard Tang routes.
 - `/rotate` is not mounted. The deployment has no scheduled handler or Cron.
-- The workers.dev hostname and preview URLs are disabled.
+- The production workers.dev hostname is enabled as an alternative endpoint;
+  preview URLs remain disabled.
 
 `TANG_KEYSET` contains `{ "version": 1, "active": [...], "retired": [...] }`.
 Both arrays contain private P-521 JWKs. Active keys are advertised; retired keys
 remain available for old clients' recovery and signature requests. Secret values
 must never be committed, printed, placed in Wrangler vars, or passed as CLI arguments.
+
+## Alternative hostname
+
+The same production Worker is also available at
+<https://tang-edge.rwv.workers.dev>. `workers_dev: true` in
+`wrangler.secrets.jsonc` preserves this setting on future deployments;
+`preview_urls: false` keeps version-specific endpoints disabled.
+
+Both hostnames use the same `TANG_KEYSET`. This provides an alternative if the
+custom domain fails, but does not protect against a Worker, account or Cloudflare
+outage. Zone-level WAF rules on `rwv.dev` do not protect the workers.dev hostname.
+Keep protocol routes accessible without browser challenges; `/rotate` remains
+unavailable in the application itself.
+
+Existing Clevis bindings embed their Tang URL and do not automatically discover
+this alternative hostname. Automatic fallback requires a separately planned
+client binding change, such as a Clevis SSS 1-of-2 binding to both URLs. This
+does not distribute trust because both URLs use the same server keys. Preserve
+and verify an independent recovery credential before changing any disk binding.
+
+Verify the alternative endpoint against an advertisement fetched from the
+trusted primary endpoint, checking both its signature and recovery keys:
+
+```sh
+curl --fail --silent --show-error https://tang.rwv.dev/adv > /tmp/tang-primary-adv.json
+bun run scripts/verify-cloudflare.ts https://tang-edge.rwv.workers.dev /tmp/tang-primary-adv.json
+```
 
 ## First deployment
 
@@ -153,7 +181,8 @@ Upstream base: `281508fe27a0bbe5c2976763134dcb55fa6e21f8`.
 3. Added immutable secret storage, validation, duplicate rejection, and failure
    responses that do not disclose secret contents.
 4. Added a dedicated Cloudflare config and generated binding types; pinned the
-   custom domain and disabled alternative public deployment hostnames.
+   custom domain. The production workers.dev hostname was subsequently enabled
+   as an alternative endpoint; preview URLs remain disabled.
 5. Added backup-first provisioning/deployment/manual rotation tooling, plus tests
    for current and retired key recovery, advertisements, and disabled rotation.
 
